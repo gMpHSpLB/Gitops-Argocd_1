@@ -1,0 +1,62 @@
+# Staging environment values
+# Updated via PR created by CI pipeline, merged after QA
+
+environment: staging
+
+image:
+  repository: ghcr.io/gMpHSpLB/myapp
+  tag: "sha-placeholder"
+  digest: ""
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+config:
+  APP_ENV: "staging"
+  APP_LOG_LEVEL: "info"
+  APP_PORT: "8000"
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "256Mi"
+    cpu: "500m"
+
+service:
+  type: ClusterIP
+
+ingress:
+  enabled: true
+  hosts:
+    - host: myapp-staging.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+
+probes:
+  readiness:
+    path: /ready
+    port: 8000
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    failureThreshold: 3
+  liveness:
+    path: /health
+    port: 8000
+    initialDelaySeconds: 15
+    periodSeconds: 10
+    failureThreshold: 3
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+autoscaling:
+  enabled: false
+
+networkPolicy:
+  enabled: true
+
+externalSecretName: myapp-staging-secret

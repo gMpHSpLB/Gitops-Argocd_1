@@ -1,0 +1,50 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: myapp-staging
+  namespace: argocd
+  labels:
+    app: myapp
+    environment: staging
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: platform-alerts
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: deployments
+    notifications.argoproj.io/subscribe.on-health-degraded.pagerduty: platform-oncall
+spec:
+  project: myapp-team
+  source:
+    repoURL: https://github.com/gMpHSpLB/Gitops-Argocd_1.git
+    targetRevision: main
+    path: .
+    helm:
+      valueFiles:
+        - envs/staging/values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: myapp-staging
+  # NO syncPolicy.automated — staging requires manual sync
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - Validate=true
+      - ApplyOutOfSyncOnly=true
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 2m
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+    # cert-manager rotates TLS — ignore diff on Secret data
+    - group: ""
+      kind: Secret
+      name: myapp-tls
+      jsonPointers:
+        - /data

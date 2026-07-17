@@ -1,0 +1,65 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: myapp-dev
+  namespace: argocd
+  labels:
+    app: myapp
+    environment: dev
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: platform-alerts
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: platform-alerts
+spec:
+  project: myapp-team
+  source:
+    repoURL: https://github.com/gMpHSpLB/Gitops-Argocd_1.git
+    targetRevision: main
+    path: .
+    helm:
+      # The chart lives in the app repo — ArgoCD pulls it separately
+      # Alternative: use OCI chart registry (preferred for large teams)
+      valueFiles:
+        - envs/dev/values.yaml
+      # The chart itself — sourced from OCI registry
+  # For chart from OCI registry (preferred):
+  # source:
+  #   repoURL: oci://ghcr.io/YOUR_ORG/charts
+  #   chart: myapp
+  #   targetRevision: "1.0.0"
+  #   helm:
+  #     valueFiles:
+  #       - $values/envs/dev/values.yaml
+  # sources:   # ArgoCD 2.6+ multi-source
+  #   - repoURL: oci://ghcr.io/YOUR_ORG/charts
+  #     chart: myapp
+  #     targetRevision: "1.0.0"
+  #   - repoURL: https://github.com/YOUR_ORG/myapp-gitops
+  #     targetRevision: main
+  #     ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: myapp-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - Validate=true
+      - ApplyOutOfSyncOnly=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  ignoreDifferences:
+    # HPA manages replicas — ignore drift on this field
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
