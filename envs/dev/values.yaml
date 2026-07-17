@@ -4,7 +4,7 @@
 environment: dev
 
 image:
-  repository: ghcr.io/gMpHSpLB/myapp
+  repository: ghcr.io/gmphsplb/myapp
   tag: "sha-placeholder"          # CI updates this field
   digest: ""                      # CI updates this field (preferred over tag)
   pullPolicy: IfNotPresent
