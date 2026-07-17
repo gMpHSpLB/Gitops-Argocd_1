@@ -4,7 +4,7 @@
 environment: staging
 image:
   repository: ghcr.io/gmphsplb/myapp
-  tag: "sha-483cb1aa1e9c6f3d9a5b53d63e097fe302ae0a50"
+  tag: "sha-68e49b7cf786dea9caed934cf9b72f60450c3fc7"
   digest: ""
   pullPolicy: IfNotPresent
 replicaCount: 2
