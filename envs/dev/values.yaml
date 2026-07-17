@@ -2,20 +2,16 @@
 # Updated automatically by CI pipeline
 
 environment: dev
-
 image:
-  repository: ghcr.io/gmphsplb/myapp
-  tag: "sha-placeholder"          # CI updates this field
-  digest: ""                      # CI updates this field (preferred over tag)
+  repository: ghcr.io//myapp
+  tag: "sha-483cb1aa1e9c6f3d9a5b53d63e097fe302ae0a50" # CI updates this field
+  digest: "" # CI updates this field (preferred over tag)
   pullPolicy: IfNotPresent
-
 replicaCount: 1
-
 config:
   APP_ENV: "dev"
   APP_LOG_LEVEL: "debug"
   APP_PORT: "8000"
-
 resources:
   requests:
     memory: "64Mi"
@@ -23,11 +19,9 @@ resources:
   limits:
     memory: "128Mi"
     cpu: "200m"
-
 service:
   type: NodePort
   nodePort: 30080
-
 probes:
   readiness:
     path: /ready
@@ -41,12 +35,9 @@ probes:
     initialDelaySeconds: 15
     periodSeconds: 10
     failureThreshold: 3
-
 podDisruptionBudget:
   enabled: false
-
 autoscaling:
   enabled: false
-
 networkPolicy:
-  enabled: false   # Enable in staging
+  enabled: false # Enable in staging
