@@ -2,20 +2,16 @@
 # Updated via PR created by CI pipeline, merged after QA
 
 environment: staging
-
 image:
   repository: ghcr.io/gmphsplb/myapp
-  tag: "sha-placeholder"
+  tag: "sha-483cb1aa1e9c6f3d9a5b53d63e097fe302ae0a50"
   digest: ""
   pullPolicy: IfNotPresent
-
 replicaCount: 2
-
 config:
   APP_ENV: "staging"
   APP_LOG_LEVEL: "info"
   APP_PORT: "8000"
-
 resources:
   requests:
     memory: "128Mi"
@@ -23,10 +19,8 @@ resources:
   limits:
     memory: "256Mi"
     cpu: "500m"
-
 service:
   type: ClusterIP
-
 ingress:
   enabled: true
   hosts:
@@ -34,7 +28,6 @@ ingress:
       paths:
         - path: /
           pathType: Prefix
-
 probes:
   readiness:
     path: /ready
@@ -48,15 +41,11 @@ probes:
     initialDelaySeconds: 15
     periodSeconds: 10
     failureThreshold: 3
-
 podDisruptionBudget:
   enabled: true
   minAvailable: 1
-
 autoscaling:
   enabled: false
-
 networkPolicy:
   enabled: true
-
 externalSecretName: myapp-staging-secret
