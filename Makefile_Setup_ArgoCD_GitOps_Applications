@@ -83,6 +83,8 @@ TEAM_WHO_OWNS_NAMESPACE					?= myapp
 
 ARGOCD_APP_PROJECT_FILE					?= projects/myapp-team.yaml
 ARGOCD_DEV_APPLICATION_FILE				?= applications/myapp-dev.yaml
+ARGOCD_STAGING_APPLICATION_FILE			?= applications/myapp-staging.yaml
+ARGOCD_PROD_APPLICATION_FILE				?= applications/myapp-prod.yaml
 
 ARGOCD_DEV_APP_NAME						?= myapp-dev
 # 
@@ -106,7 +108,7 @@ k8s-apply-argocd-app-project-to-argocd-namespace: ## Apply ArgoCD AppProject for
 	# Verify it exists
 	kubectl get appprojects.argoproj.io -n $(K8S_ARGOCD_NAMESPACE)
 
-k8s-apply-dev-argocd-application-to-cluster: ## Apply the Application to the cluster
+k8s-apply-dev-argocd-application-to-cluster: ## Apply the Dev Application to the cluster
 	@printf '$(CYAN) %s $(RESET) \n' \
 		' Apply the Application to the cluster ' \
 		' ArgoCD watches for Application objects in the argocd namespace '
@@ -442,3 +444,15 @@ explore-app-of-apps-pattern-one-root-application-manages-other-applications: ## 
 	read -r _
 
 
+
+k8s-apply-staging-argocd-application-to-cluster: ## Apply the Staging Application to the cluster
+	@printf '$(CYAN) %s $(RESET) \n' \
+		' Apply the Staging Application to the cluster ' \
+		' ArgoCD watches for Application objects in the argocd namespace '
+	kubectl apply -f $(ARGOCD_STAGING_APPLICATION_FILE)
+
+k8s-apply-prod-argocd-application-to-cluster: ## Apply the Prod Application to the cluster
+	@printf '$(CYAN) %s $(RESET) \n' \
+		' Apply the Prod Application to the cluster ' \
+		' ArgoCD watches for Application objects in the argocd namespace '
+	kubectl apply -f $(ARGOCD_PROD_APPLICATION_FILE)
