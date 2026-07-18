@@ -20,6 +20,17 @@ SHELL := /bin/bash
 .PHONY: explore-app-of-apps-pattern-one-root-application-manages-other-applications #- Understand ArgoCD uses the "App of Apps" pattern one root Application that manages other Applications.
 .PHONY: reset-application-for-dev-environment ## Delete ArgoCD dev app, project entry and dev namespace (for local reset)
 .PHONY: verify-reset-application-for-dev-environment-done-successfully ## Verify that dev ArgoCD app and namespace are deleted
+.PHONY: k8s-create-namespace-where-argocd-application-deploy-in-prod-environment
+.PHONY: k8s-add-two-labels-to-prod-namespace-associated-with-env-and-ownerteam
+.PHONY: k8s-apply-staging-argocd-application-to-cluster
+.PHONY: k8s-watch-status-of-staging-argocd-application-in-argocd-namespace
+.PHONY: k8s-apply-prod-argocd-application-to-cluster
+.PHONY: k8s-watch-status-of-prod-argocd-application-in-argocd-namespace
+.PHONY: argocd-sync-staging-application
+.PHONY: argocd-sync-prod-application
+.PHONY: reset-myapp-dev-environment
+.PHONY: apply-staging-secret
+.PHONY: apply-prod-secret
 
 # Self-documenting help: list targets with "##" comments
 help: ## Show all available targets with short descriptions.
@@ -81,10 +92,15 @@ K8S_NAMESPACE_PROD						?= myapp-prod
 
 TEAM_WHO_OWNS_NAMESPACE					?= myapp
 
-ARGOCD_APP_PROJECT_FILE					?= projects/myapp-team.yaml
-ARGOCD_DEV_APPLICATION_FILE				?= applications/myapp-dev.yaml
+ARGOCD_APP_PROJECT_FILE         ?= projects/myapp-team.yaml
 
-ARGOCD_DEV_APP_NAME						?= myapp-dev
+ARGOCD_DEV_APPLICATION_FILE     ?= applications/myapp-dev.yaml
+ARGOCD_STAGING_APPLICATION_FILE ?= applications/myapp-staging.yaml
+ARGOCD_PROD_APPLICATION_FILE    ?= applications/myapp-prod.yaml
+
+ARGOCD_DEV_APP_NAME             ?= myapp-dev
+ARGOCD_STAGING_APP_NAME         ?= myapp-staging
+ARGOCD_PROD_APP_NAME            ?= myapp-prod
 # 
 # -----------------------------------------------------------------
 
@@ -97,6 +113,14 @@ k8s-add-two-labels-to-dev-namespace-associated-with-env-and-ownerteam: ## this n
 
 k8s-create-namespace-where-argocd-application-deploy-in-staging-environment: ## Create namespaces that ArgoCD will deploy into
 	kubectl create namespace $(K8S_NAMESPACE_STAGING) --dry-run=client -o yaml | kubectl apply -f -
+
+
+k8s-create-namespace-where-argocd-application-deploy-in-prod-environment: ## Create namespace that ArgoCD will deploy into for prod
+	kubectl create namespace $(K8S_NAMESPACE_PROD) --dry-run=client -o yaml | kubectl apply -f -
+
+
+k8s-add-two-labels-to-prod-namespace-associated-with-env-and-ownerteam: ## this namespace is for the prod environment and owned by the myapp team
+	kubectl label namespace $(K8S_NAMESPACE_PROD) environment=prod team=$(TEAM_WHO_OWNS_NAMESPACE)
 
 k8s-add-two-labels-to-staging-namespace-associated-with-env-and-ownerteam: ## this namespace is for the staging environment and owned by the myapp team
 	kubectl label namespace $(K8S_NAMESPACE_STAGING) environment=staging team=$(TEAM_WHO_OWNS_NAMESPACE)
@@ -133,6 +157,78 @@ k8s-watch-status-of-dev-argocd-application-in-argocd-namespace: # Watch the Appl
 		printf '$(YELLOW) %s $(RESET)\n' \
 			"  kubectl get application $(ARGOCD_DEV_APP_NAME) -n $(K8S_ARGOCD_NAMESPACE)"; \
 	fi
+
+
+k8s-apply-staging-argocd-application-to-cluster: ## Apply the staging Application to the cluster
+	@printf '$(CYAN) %s $(RESET) \n' \
+		' Apply the staging ArgoCD Application to the cluster ' \
+		' ArgoCD watches for Application objects in the argocd namespace '
+	kubectl apply -f $(ARGOCD_STAGING_APPLICATION_FILE)
+
+
+k8s-watch-status-of-staging-argocd-application-in-argocd-namespace: ## Watch the staging Application status
+	@printf '$(CYAN) %s $(RESET) \n' \
+		'Watch the Staging ArgoCD Application status ' \
+		'   - Expect: myapp-staging -> Synced & Healthy'
+	@printf '$(YELLOW) %s $(RESET)\n' \
+		'Watching Staging ArgoCD Application status for up to 30 seconds'
+	@set -e; \
+	if timeout 30s kubectl get application $(ARGOCD_STAGING_APP_NAME) -n $(K8S_ARGOCD_NAMESPACE) -w; then \
+		printf '$(GREEN) %s $(RESET)\n' \
+			'Finished watching myapp-staging.'; \
+	else \
+		printf '$(YELLOW) %s $(RESET)\n' \
+			'Watch timed out after 30 seconds. Check current status with:'; \
+		printf '$(YELLOW) %s $(RESET)\n' \
+			"  kubectl get application $(ARGOCD_STAGING_APP_NAME) -n $(K8S_ARGOCD_NAMESPACE)"; \
+	fi
+
+
+k8s-apply-prod-argocd-application-to-cluster: ## Apply the prod Application to the cluster
+	@printf '$(CYAN) %s $(RESET) \n' \
+		' Apply the prod ArgoCD Application to the cluster ' \
+		' ArgoCD watches for Application objects in the argocd namespace '
+	kubectl apply -f $(ARGOCD_PROD_APPLICATION_FILE)
+
+
+k8s-watch-status-of-prod-argocd-application-in-argocd-namespace: ## Watch the prod Application status
+	@printf '$(CYAN) %s $(RESET) \n' \
+		'Watch the Prod ArgoCD Application status ' \
+		'   - Expect: myapp-prod -> Synced & Healthy'
+	@printf '$(YELLOW) %s $(RESET)\n' \
+		'Watching Prod ArgoCD Application status for up to 30 seconds'
+	@set -e; \
+	if timeout 30s kubectl get application $(ARGOCD_PROD_APP_NAME) -n $(K8S_ARGOCD_NAMESPACE) -w; then \
+		printf '$(GREEN) %s $(RESET)\n' \
+			'Finished watching myapp-prod.'; \
+	else \
+		printf '$(YELLOW) %s $(RESET)\n' \
+			'Watch timed out after 30 seconds. Check current status with:'; \
+		printf '$(YELLOW) %s $(RESET)\n' \
+			"  kubectl get application $(ARGOCD_PROD_APP_NAME) -n $(K8S_ARGOCD_NAMESPACE)"; \
+	fi
+
+
+apply-staging-secret: ## Apply Secret for STAGING environment
+	kubectl apply \
+		-f secrets/myapp-staging-secret.yaml
+
+.PHONY: apply-prod-secret
+apply-prod-secret: ## Apply Secret for PROD environment
+	kubectl apply \
+		-f secrets/myapp-prod-secret.yaml
+
+
+argocd-sync-staging-application: ## Sync the staging ArgoCD Application
+	@printf '$(CYAN) %s $(RESET) \n' \
+		'Syncing staging application myapp-staging via argocd CLI'
+	$(ARGOCD_CLI_TOOL) app sync $(ARGOCD_STAGING_APP_NAME)
+
+
+argocd-sync-prod-application: ## Sync the prod ArgoCD Application
+	@printf '$(CYAN) %s $(RESET) \n' \
+		'Syncing prod application myapp-prod via argocd CLI'
+	$(ARGOCD_CLI_TOOL) app sync $(ARGOCD_PROD_APP_NAME)
 
 k8s-get-detailed-status-of-dev-argocd-application: ## Get detailed Application status
 	@printf '$(CYAN) %s $(RESET) \n' \
@@ -182,7 +278,7 @@ review-argocd-dev-application-two-status-dimensions-sync-and-health: ## Check de
 	read -r _; \
 	kubectl get application $(ARGOCD_DEV_APP_NAME) -n $(K8S_ARGOCD_NAMESPACE) -o yaml | grep -A 20 "status:"
 
-.PHONY: reset-myapp-dev-environment
+
 reset-application-for-dev-environment: ## Delete ArgoCD dev app, project entry and dev namespace (for local reset)
 	@printf '$(YELLOW) %s $(RESET)\n' \
 		'Resetting myapp dev environment: deleting'  \

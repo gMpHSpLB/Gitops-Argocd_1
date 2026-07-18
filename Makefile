@@ -154,19 +154,33 @@ create-argocd-dev-application-and-status-check: ## Create ArgoCD Application in 
 check-both-status-dimensions-sync-and-health-for-dev-application:
 	$(MAKE) -f Makefile_Setup_ArgoCD_GitOps_Applications review-argocd-dev-application-two-status-dimensions-sync-and-health
 
+.PHONY: create-argocd-staging-application-and-status-check
+create-argocd-staging-application-and-status-check: ## Create ArgoCD Application in staging environment and check status
+	@printf '$(CYAN) %s $(RESET) \n' \
+		'Create ArgoCD Application for STAGING environment and check status'; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to continue..." ;\
+	read -r _
+	$(MAKE) -f Makefile_Setup_ArgoCD_GitOps_Applications k8s-create-namespace-where-argocd-application-deploy-in-staging-environment
+	$(MAKE) -f Makefile_Setup_ArgoCD_GitOps_Applications k8s-add-two-labels-to-staging-namespace-associated-with-env-and-ownerteam
+	$(MAKE) -f Makefile_Setup_ArgoCD_GitOps_Applications k8s-apply-argocd-app-project-to-argocd-namespace
+	$(MAKE) -f Makefile_Setup_ArgoCD_GitOps_Applications k8s-apply-staging-argocd-application-to-cluster
+	$(MAKE) -f Makefile_Setup_ArgoCD_GitOps_Applications k8s-watch-status-of-staging-argocd-application-in-argocd-namespace
+	$(MAKE) -f Makefile_Setup_ArgoCD_GitOps_Applications argocd-sync-staging-application
+	$(MAKE) -f Makefile_Setup_ArgoCD_GitOps_Applications apply-staging-secret
 
-
-# understand-gitops-in-argocd-with-drift-detection:
-# 	$(MAKE) -f Makefile_Setup_ArgoCD_GitOps_Applications explore-drift-detection-to-understand-gitops-in-argocd
-
-# understand-sync-mode-strategies-for-dev-satging-and-prod-environment:
-# 	$(MAKE) -f Makefile_Setup_ArgoCD_GitOps_Applications explore-sync-strategies-when-to-use-each-mode
-
-# understand-sync-waves-and-how-to-handle-resource-order:
-# 	$(MAKE) -f Makefile_Setup_ArgoCD_GitOps_Applications explore-sync-waves-handle-resource-order-when-resource-A-depends-on-resource-B-etc
-
-# understand-app-of-apps-pattern-one-root-application-manages-other-applications:
-# 	$(MAKE) -f Makefile_Setup_ArgoCD_GitOps_Applications explore-app-of-apps-pattern-one-root-application-manages-other-applications
+.PHONY: create-argocd-prod-application-and-status-check
+create-argocd-prod-application-and-status-check: ## Create ArgoCD Application in prod environment and check status
+	@printf '$(CYAN) %s $(RESET) \n' \
+		'Create ArgoCD Application for PROD environment and check status'; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to continue..." ;\
+	read -r _
+	$(MAKE) -f Makefile_Setup_ArgoCD_GitOps_Applications k8s-create-namespace-where-argocd-application-deploy-in-prod-environment
+	$(MAKE) -f Makefile_Setup_ArgoCD_GitOps_Applications k8s-add-two-labels-to-prod-namespace-associated-with-env-and-ownerteam
+	$(MAKE) -f Makefile_Setup_ArgoCD_GitOps_Applications k8s-apply-argocd-app-project-to-argocd-namespace
+	$(MAKE) -f Makefile_Setup_ArgoCD_GitOps_Applications k8s-apply-prod-argocd-application-to-cluster
+	$(MAKE) -f Makefile_Setup_ArgoCD_GitOps_Applications k8s-watch-status-of-prod-argocd-application-in-argocd-namespace
+	$(MAKE) -f Makefile_Setup_ArgoCD_GitOps_Applications argocd-sync-prod-application
+	$(MAKE) -f Makefile_Setup_ArgoCD_GitOps_Applications apply-prod-secret
 
 
 # Example: safe usage pattern
