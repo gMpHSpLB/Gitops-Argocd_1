@@ -4,7 +4,7 @@
 environment: dev
 image:
   repository: ghcr.io//myapp
-  tag: "sha-68e49b7cf786dea9caed934cf9b72f60450c3fc7" # CI updates this field
+  tag: "sha-e54ac5ac8359824e110c92fc2a66b2a852ffd5d1" # CI updates this field
   digest: "" # CI updates this field (preferred over tag)
   pullPolicy: IfNotPresent
 replicaCount: 1
