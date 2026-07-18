@@ -33,7 +33,7 @@ spec:
   #       - $values/envs/dev/values.yaml
   sources:   # ArgoCD 2.6+ multi-source
     # Source 1: Helm chart from OCI (GHCR)
-    - repoURL: oci://ghcr.io/gmphsplb/helm-lab
+    - repoURL: ghcr.io/gmphsplb/helm-lab
       chart: myapp
       targetRevision: "1.0.0"
       helm:

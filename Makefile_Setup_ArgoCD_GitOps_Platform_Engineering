@@ -366,6 +366,13 @@ ghcr-check-secrets:
 	  exit 1; \
 	fi
 
+
+.PHONY: k8s-apply-argocd-oci-helm-lab-repo-secret
+k8s-apply-argocd-oci-helm-lab-repo-secret: ## Apply ArgoCD Helm OCI repo Secret
+	@printf '$(YELLOW) %s $(RESET)\n' 'Apply ArgoCD Helm OCI repo Secret (GHCR credentials)'
+	kubectl apply -f argocd-oci-helm-lab-repo-secret.yaml
+	@printf '$(GREEN) %s $(RESET)\n' 'Secret my-oci-helm-lab applied to argocd namespace'
+	
 # Use the actual GitHub repository:
 register-public-helm-oci-repo-as-source-for-helm-chart-with-argocd: ghcr-check-secrets k8s-argocd-login-argocd-server-via-cli ## Register the public Helm OCI repo with ArgoCD
 	@if [ -z "$(GHCR_USERNAME)" ] || [ -z "$(GHCR_PAT)" ]; then \

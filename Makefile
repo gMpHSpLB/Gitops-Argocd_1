@@ -82,6 +82,7 @@ setup-argocd: ##
 		' Step 5. Register the public Helm OCI repo as a source for hel chart with ArgoCD'; \
 	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to run Step 5..."; \
 	read -r _
+	$(MAKE) -f Makefile_Setup_ArgoCD_GitOps_Platform_Engineering k8s-apply-argocd-oci-helm-lab-repo-secret
 	$(MAKE) -f Makefile_Setup_ArgoCD_GitOps_Platform_Engineering register-public-helm-oci-repo-as-source-for-helm-chart-with-argocd
 
 reset-everything-for-application-for-dev-environment: ## Delete ArgoCD dev app, project entry and dev namespace (for local reset)
