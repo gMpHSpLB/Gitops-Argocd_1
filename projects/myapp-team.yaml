@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: myapp-team
+  namespace: argocd
+spec:
+  description: Project for myapp team
+  # Allow the GitOps repo AND the OCI Helm repo
+  sourceRepos:
+    - "*"  
+    # - https://github.com/gMpHSpLB/Gitops-Argocd_1.git
+    # - oci://ghcr.io/gmphsplb/helm-lab
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: myapp-dev
+    - server: https://kubernetes.default.svc
+      namespace: myapp-staging
+    - server: https://kubernetes.default.svc
+      namespace: myapp-prod
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"

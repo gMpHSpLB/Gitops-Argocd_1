@@ -1,0 +1,444 @@
+# Use Bash for shell commands in recipes.
+# This gives us better shell features than plain sh.
+SHELL := /bin/bash
+
+# Default target
+.DEFAULT_GOAL := help
+.PHONY: help
+.PHONY: k8s-add-two-labels-to-dev-namespace-associated-with-env-and-ownerteam #- this namespace is for the dev environment and owned by the myapp team
+.PHONY: k8s-create-namespace-where-argocd-application-deploy-in-staging-environment #- Create namespaces that ArgoCD will deploy into
+.PHONY: k8s-add-two-labels-to-staging-namespace-associated-with-env-and-ownerteam #- this namespace is for the staging environment and owned by the myapp team
+.PHONY: k8s-apply-argocd-app-project-to-argocd-namespace ## Apply ArgoCD AppProject for myapp-team
+.PHONY: k8s-apply-dev-argocd-application-to-cluster #- Apply the Application to the cluster
+.PHONY: k8s-get-detailed-status-of-dev-argocd-application #- Get detailed Application status
+.PHONY: k8s-see-resources-argocd-created-for-dev-argocd-application #- See the resources ArgoCD created
+.PHONY: k8s-see-diff-between-desired-and-actual-for-dev-argocd-application #- See the diff between desired and actual (should be empty when Synced)
+.PHONY: review-argocd-dev-application-two-status-dimensions-sync-and-health #- Check dev application both status dimensions sync-and-health
+.PHONY: explore-drift-detection-to-understand-gitops-in-argocd #- This demonstrates what ArgoCD actually does differently from plain Helm.
+.PHONY: explore-sync-strategies-when-to-use-each-mode #- Sync Strategies Understand when to use each mode
+.PHONY: explore-sync-waves-handle-resource-order-when-resource-A-depends-on-resource-B-etc #- Understand Sync Waves and Resource Order
+.PHONY: explore-app-of-apps-pattern-one-root-application-manages-other-applications #- Understand ArgoCD uses the "App of Apps" pattern one root Application that manages other Applications.
+.PHONY: reset-application-for-dev-environment ## Delete ArgoCD dev app, project entry and dev namespace (for local reset)
+.PHONY: verify-reset-application-for-dev-environment-done-successfully ## Verify that dev ArgoCD app and namespace are deleted
+
+# Self-documenting help: list targets with "##" comments
+help: ## Show all available targets with short descriptions.
+	# This target reads the Makefile and prints any line ending with ##.
+	# Use this when you want to discover available commands quickly.
+	# Expected output: a list of targets and one-line descriptions.
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ { printf "  %-28s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+
+.PHONY: 
+# ---------- GLOBAL CONFIG --------------------------------------
+RED    := \033[1;31m
+YELLOW := \033[1;33m
+GREEN  :="\033[1;32m"
+CYAN   := \033[1;36m
+RESET  := \033[0m
+
+# ---------- ArgoCD ----------------------------------------------
+ARGOCD_CLI_INSTALLER_URL 				?= https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+ARGOCD_CLI_TOOL 						?= bin/argocd
+
+# Set ARGOCD_SERVER to the service, not localhost
+ARGOCD_PORT 							?= 8080
+ARGOCD_SERVER_URL						?= localhost:$(ARGOCD_PORT)
+ARGOCD_USERNAME 						?= admin
+ARGOCD_ADMIN_PASSWORD					?= admin123
+#Set to true in-case you want to delete the initial argocd server password
+DELETE_INITIAL_ARGOCD_ADMIN_PASSWORD	?= false
+# For local dev, we often disable TLS verification for the CLI.
+# Set to false if you want to disable insecure login
+DISABLE_INSECURE_PATCH 					?= true
+ARGOCD_INSECURE 						?= true
+ARGOCD_PF_LOG 							?= /tmp/argocd-port-forward.log
+ARGOCD_PF_PID 							?= /tmp/argocd-port-forward.pid
+
+K8S_ARGOCD_NAMESPACE 					?= argocd
+ARGOCD_MANIFEST_URL 					?= https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+ARGOCD_CMD_PARAMS_CM           			?= argocd-cmd-params-cm
+ARGOCD_MAIN_CM                 			?= argocd-cm
+ARGOCD_SERVER_DEPLOYMENT       			?= argocd-server
+
+ARGOCD_SERVER_INSECURE_KEY     			?= server.insecure
+ARGOCD_SERVER_INSECURE_VALUE   			?= false
+
+ARGOCD_RESOURCE_TRACKING_KEY   			?= application.resourceTrackingMethod
+ARGOCD_RESOURCE_TRACKING_VALUE 			?= annotation
+
+ARGOCD_TIMEOUT_RECONCILIATION_KEY        ?= timeout.reconciliation
+ARGOCD_TIMEOUT_RECONCILIATION_VALUE      ?= 180s
+ARGOCD_TIMEOUT_HARD_RECONCILIATION_KEY   ?= timeout.hard.reconciliation
+ARGOCD_TIMEOUT_HARD_RECONCILIATION_VALUE ?= 0
+
+GITOPS_SOURCE_PROJECT					 ?= Gitops-ArgoCD-1-Source
+
+# --------------- ArgoCD Application ------------------------------
+K8S_NAMESPACE_DEV 						?= myapp-dev
+K8S_NAMESPACE_STAGING					?= myapp-staging
+K8S_NAMESPACE_PROD						?= myapp-prod
+
+TEAM_WHO_OWNS_NAMESPACE					?= myapp
+
+ARGOCD_APP_PROJECT_FILE					?= projects/myapp-team.yaml
+ARGOCD_DEV_APPLICATION_FILE				?= applications/myapp-dev.yaml
+
+ARGOCD_DEV_APP_NAME						?= myapp-dev
+# 
+# -----------------------------------------------------------------
+
+
+k8s-create-namespace-where-argocd-application-deploy-in-dev-environment: ## Create namespaces that ArgoCD will deploy into
+	kubectl create namespace $(K8S_NAMESPACE_DEV) --dry-run=client -o yaml | kubectl apply -f -
+
+k8s-add-two-labels-to-dev-namespace-associated-with-env-and-ownerteam: ## this namespace is for the dev environment and owned by the myapp team
+	kubectl label namespace $(K8S_NAMESPACE_DEV) environment=dev team=$(TEAM_WHO_OWNS_NAMESPACE)
+
+k8s-create-namespace-where-argocd-application-deploy-in-staging-environment: ## Create namespaces that ArgoCD will deploy into
+	kubectl create namespace $(K8S_NAMESPACE_STAGING) --dry-run=client -o yaml | kubectl apply -f -
+
+k8s-add-two-labels-to-staging-namespace-associated-with-env-and-ownerteam: ## this namespace is for the staging environment and owned by the myapp team
+	kubectl label namespace $(K8S_NAMESPACE_STAGING) environment=staging team=$(TEAM_WHO_OWNS_NAMESPACE)
+
+k8s-apply-argocd-app-project-to-argocd-namespace: ## Apply ArgoCD AppProject for myapp-team
+	kubectl apply -n $(K8S_ARGOCD_NAMESPACE) -f $(ARGOCD_APP_PROJECT_FILE)
+	# Verify it exists
+	kubectl get appprojects.argoproj.io -n $(K8S_ARGOCD_NAMESPACE)
+
+k8s-apply-dev-argocd-application-to-cluster: ## Apply the Application to the cluster
+	@printf '$(CYAN) %s $(RESET) \n' \
+		' Apply the Application to the cluster ' \
+		' ArgoCD watches for Application objects in the argocd namespace '
+	kubectl apply -f $(ARGOCD_DEV_APPLICATION_FILE)
+
+k8s-watch-status-of-dev-argocd-application-in-argocd-namespace: # Watch the Application status
+	@printf '$(CYAN) %s $(RESET) \n' \
+		'Watch the Dev ArgoCD Application status ' \
+		'	- Within ~30 seconds you should see: ' \
+		'		# NAME        SYNC STATUS   HEALTH STATUS ' \
+		'		# myapp-dev   Synced        Healthy		  '
+# 	kubectl get application $(ARGOCD_DEV_APP_NAME) -n $(K8S_ARGOCD_NAMESPACE) -w
+	@printf '$(YELLOW) %s $(RESET)\n' \
+		'Watching Dev ArgoCD Application status for up to 30 seconds'
+	@printf '$(YELLOW) %s $(RESET)\n' \
+		'Expect: myapp-dev -> Synced & Healthy within this window'
+	@set -e; \
+	if timeout 30s kubectl get application $(ARGOCD_DEV_APP_NAME) -n $(K8S_ARGOCD_NAMESPACE) -w; then \
+		printf '$(GREEN) %s $(RESET)\n' \
+			'Finished watching myapp-dev (either you interrupted or the watch ended).'; \
+	else \
+		printf '$(YELLOW) %s $(RESET)\n' \
+			'Watch timed out after 30 seconds. Check current status with:'; \
+		printf '$(YELLOW) %s $(RESET)\n' \
+			"  kubectl get application $(ARGOCD_DEV_APP_NAME) -n $(K8S_ARGOCD_NAMESPACE)"; \
+	fi
+
+k8s-get-detailed-status-of-dev-argocd-application: ## Get detailed Application status
+	@printf '$(CYAN) %s $(RESET) \n' \
+		'Get detailed Dev ArgoCD Application status '
+	$(ARGOCD_CLI_TOOL) app get $(ARGOCD_DEV_APP_NAME)
+
+k8s-see-resources-argocd-created-for-dev-argocd-application: ## See the resources ArgoCD created
+	@printf '$(CYAN) %s $(RESET) \n' \
+		'See the resources ArgoCD created for Dev ArgoCD Application'
+	$(ARGOCD_CLI_TOOL) app resources $(ARGOCD_DEV_APP_NAME)
+
+k8s-see-diff-between-desired-and-actual-for-dev-argocd-application: ## See the diff between desired and actual (should be empty when Synced)
+	@printf '$(CYAN) %s $(RESET) \n' \
+		'See the diff between desired and actual (should be empty when Synced) for Dev ArgoCD Application' 
+	$(ARGOCD_CLI_TOOL) app diff $(ARGOCD_DEV_APP_NAME)
+
+review-argocd-dev-application-two-status-dimensions-sync-and-health: ## Check dev application both status dimensions sync-and-health
+	@printf '$(CYAN) %s $(RESET) \n' \
+		" Sync Status: Does the cluster match what's in Git?" \
+		" 	•	Synced — cluster matches Git" \
+		" 	•	OutOfSync — cluster differs from Git (could be drift or pending changes)" \
+		" 	•	Unknown — ArgoCD can't determine (usually repo connectivity issue)" \
+		" Health Status: Is the application actually working?" \
+		" 	•	Healthy — all resources are healthy (pods running, ingress resolving, etc.)" \
+		" 	•	Progressing — rolling update in progress" \
+		" 	•	Degraded — something is wrong (pod crashlooping, deployment stalled)" \
+		" 	•	Missing — resource expected but not found in cluster" \
+		" 	•	Suspended — paused (for Argo Rollouts)" \
+		" 	•	Unknown — ArgoCD can't determine health" \
+		" Critical insight: These are independent." \
+		"		You can have Synced + Degraded — Git matches cluster but the application is broken."\
+		"		You can have OutOfSync + Healthy — someone made a beneficial manual" \
+		"			change that differs from Git but the app is running fine." ; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to continue..."; \
+	read -r _
+
+	@printf '$(CYAN) %s $(RESET) \n' \
+		'Get dev application both status dimensions sync-and-health'; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to continue...";  \
+	read -r _; \
+	kubectl get application $(ARGOCD_DEV_APP_NAME) -n $(K8S_ARGOCD_NAMESPACE) \
+  		-o jsonpath='{.status.sync.status} {.status.health.status}'
+
+	@printf '\n $(CYAN) %s $(RESET) \n' \
+		'Check dev application full status object'; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to continue...";  \
+	read -r _; \
+	kubectl get application $(ARGOCD_DEV_APP_NAME) -n $(K8S_ARGOCD_NAMESPACE) -o yaml | grep -A 20 "status:"
+
+.PHONY: reset-myapp-dev-environment
+reset-application-for-dev-environment: ## Delete ArgoCD dev app, project entry and dev namespace (for local reset)
+	@printf '$(YELLOW) %s $(RESET)\n' \
+		'Resetting myapp dev environment: deleting'  \
+		'        ArgoCD Application, ' \
+		'        AppProject entry and ' \
+		'        dev namespace (optional).'; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to continue...";  \
+	read -r _;
+
+	# 1. Delete dev Argo CD Application via CLI (non-cascade by default).
+	# Use || true to avoid failing the whole target if the app does not exist or user is not allowed.
+	@if command -v $(ARGOCD_CLI_TOOL) >/dev/null 2>&1; then \
+		printf '$(YELLOW) %s $(RESET)\n' 'Deleting ArgoCD Application $(ARGOCD_DEV_APP_NAME) via argocd CLI (if present)...'; \
+		printf '$(CYAN) %s $(RESET) \n' "Press ENTER to continue...";  \
+		read -r _; \
+		timeout 30s $(ARGOCD_CLI_TOOL) app delete $(ARGOCD_DEV_APP_NAME) -y || \
+			printf '$(YELLOW) %s $(RESET)\n' 'argocd CLI app delete failed (possibly already deleted or PermissionDenied); continuing reset using kubectl.'; \
+	else \
+		printf '$(YELLOW) %s $(RESET)\n' 'argocd CLI not found; skipping CLI-based app delete.'; \
+	fi
+
+	# 2. Ensure Application CRD is gone via kubectl with timeout.
+	@printf '$(YELLOW) %s $(RESET)\n' 'Ensuring Application CRD is deleted via kubectl with timeout...'; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to continue...";  \
+	read -r _; \
+	timeout 30s kubectl delete application $(ARGOCD_DEV_APP_NAME) -n $(K8S_ARGOCD_NAMESPACE) --ignore-not-found=true || true
+
+	# 3. (Optional) delete dev namespace for a full reset.
+	@printf '$(YELLOW) %s $(RESET)\n' 'Deleting dev namespace $(K8S_NAMESPACE_DEV) (optional for local labs)...'; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to continue...";  \
+	read -r _; \
+	timeout 30s kubectl delete namespace $(K8S_NAMESPACE_DEV) --ignore-not-found=true || true
+
+	@printf '$(GREEN) %s $(RESET)\n' 'Dev environment reset complete (best-effort; missing resources are ignored).'
+
+verify-reset-application-for-dev-environment-done-successfully: ## Verify that dev ArgoCD app and namespace are deleted
+	@printf '$(CYAN) %s $(RESET)\n' 'Verifying that myapp-dev Application is deleted...' ;\
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to continue...";  \
+	read -r _;
+	@kubectl get application $(ARGOCD_DEV_APP_NAME) -n $(K8S_ARGOCD_NAMESPACE) || \
+		printf '$(GREEN) %s $(RESET)\n' 'myapp-dev Application not found (expected after reset).'
+
+	@printf '$(CYAN) %s $(RESET)\n' 'Verifying that dev namespace $(K8S_NAMESPACE_DEV) is deleted (or terminating)...'; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to continue...";  \
+	read -r _;	
+	@kubectl get ns $(K8S_NAMESPACE_DEV) || \
+		printf '$(GREEN) %s $(RESET)\n' 'Namespace $(K8S_NAMESPACE_DEV) not found (expected if reset deletes namespace).'
+
+explore-drift-detection-to-understand-gitops-in-argocd: ##This demonstrates what ArgoCD actually does differently from plain Helm.
+	@printf '$(CYAN) %s $(RESET) \n' \
+		" Drift Detection: The Core Value of GitOps" \
+		" 	This demonstrates what ArgoCD actually does differently from plain Helm." \
+		" 	What will happen in the entire value proposition of GitOps:" \
+		"		1.	Operator makes an undocumented change (kubectl scale)" \
+		"		2.	ArgoCD will detects the drift automatically" \
+		"		3.	ArgoCD reconciles the cluster back to the Git-declared state" \
+		"		4.	The operator's change left no permanent trace in the cluster." \
+		"		5.	The audit trail (what actually happened) lives in Git."; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to continue..."; \
+	read -r _
+
+	@printf '$(CYAN) %s $(RESET) \n' \
+		" What will we do to demonstrate this : " \
+		" 		- Step 0. Force manual sync policy for the demo " \
+		" 		- Step 1. Verify current state: Synced + Healthy " \
+		" 		- Step 2. DELIBERATELY BREAK GitOps discipline — manually scale the deployment " \
+		" 		- Step 3. Immediately check Application status" \
+		" 		- Step 4. Watch the deployment return to 1 replica" \
+		" 		- Step 5. ArgoCD will patch replicas back to 1" \
+		" 		- Step 6. Watch sync in progress" \
+		" 		- Step 7. Verify restored"  \
+		" 		- Step 8. Restore original sync policy, revert the sync policy to your desired automated " ; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to continue..."; \
+	read -r _
+
+	@printf '$(CYAN) %s $(RESET) \n' \
+		'Step 0. Force manual sync policy for the demo '; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to run Step 1...";  \
+	read -r _; \
+	$(ARGOCD_CLI_TOOL) app set $(ARGOCD_DEV_APP_NAME) --sync-policy none
+
+	@printf '$(CYAN) %s $(RESET) \n' \
+		'Step 1. Verify current state: Synced + Healthy' \
+		'	Expected: Sync Policy Manual, Sync Status Synced, replicas 1' ; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to run Step 1...";  \
+	read -r _; \
+	$(ARGOCD_CLI_TOOL) app get $(ARGOCD_DEV_APP_NAME)  | grep -E "Sync|Health Status|Health Status"
+	kubectl get deployment $(ARGOCD_DEV_APP_NAME) -n $(K8S_NAMESPACE_DEV) -o jsonpath='{.spec.replicas}{"\n"}'
+
+	@printf '$(CYAN) %s $(RESET) \n' \
+		'Step 2. DELIBERATELY BREAK GitOps discipline — manually scale the deployment' \
+		'	Expected: replicas 5'; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to run Step 2...";  \
+	read -r _
+	kubectl scale deployment $(ARGOCD_DEV_APP_NAME) -n $(K8S_NAMESPACE_DEV) --replicas=5
+	kubectl get deployment $(ARGOCD_DEV_APP_NAME) -n $(K8S_NAMESPACE_DEV) -o jsonpath='{.spec.replicas}{"\n"}'
+
+	@printf '$(CYAN) %s $(RESET) \n' \
+		"Step 3. Immediately check Application status" \
+		"	Within 3 minutes (the default reconciliation interval), ArgoCD detects the drift:" \
+		"		NAME        SYNC STATUS   HEALTH STATUS	" \
+		"		myapp-dev   OutOfSync     Healthy		"	\
+		"	The app is still healthy (5 pods running), "\
+		"	but it's OutOfSync because Git says replicas: 1 (dev values) "\
+		"	and the cluster has replicas: 5. "; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to run Step 3...";  \
+	read -r _; \
+	@set -e; \
+	if timeout 180s kubectl get application $(ARGOCD_DEV_APP_NAME) -n $(K8S_ARGOCD_NAMESPACE) -w; then \
+		printf '$(GREEN) %s $(RESET)\n' \
+			"Finished watching myapp-dev (either you interrupted or the watch ended)."; \
+	else \
+		printf '$(YELLOW) %s $(RESET)\n' \
+			'Watch timed out after 180 seconds. Check current status with:'; \
+		printf '$(YELLOW) %s $(RESET)\n' \
+			"  kubectl get application $(ARGOCD_DEV_APP_NAME) -n $(K8S_ARGOCD_NAMESPACE)"; \
+	fi
+
+	@printf '$(CYAN) %s $(RESET) \n' \
+		"Step 4. Watch the deployment return to 1 replica" \
+		"		 Because selfHeal: true, ArgoCD automatically reconciles:"; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to run Step 4...";  \
+	read -r _; \
+	@set -e; \
+	if timeout 180s kubectl get application $(ARGOCD_DEV_APP_NAME) -n $(K8S_ARGOCD_NAMESPACE) -w; then \
+		printf '$(GREEN) %s $(RESET)\n' \
+			'Finished watching myapp-dev (either you interrupted or the watch ended).'; \
+	else \
+		printf '$(YELLOW) %s $(RESET)\n' \
+			'Watch timed out after 180 seconds. Check current status with:'; \
+		printf '$(YELLOW) %s $(RESET)\n' \
+			"  kubectl get application $(ARGOCD_DEV_APP_NAME) -n $(K8S_ARGOCD_NAMESPACE)"; \
+	fi
+
+	@printf '$(CYAN) %s $(RESET) \n' \
+		"Step 5. ArgoCD will patch replicas back to 1" \
+		"		 Expected within 3 minutes of detecting the drift" \
+		"		 Force immediate sync (don't wait for the 3-minute interval)"; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to run Step 5...";  \
+	read -r _; \
+	$(ARGOCD_CLI_TOOL) app sync $(ARGOCD_DEV_APP_NAME)
+
+	@printf '$(CYAN) %s $(RESET) \n' \
+		"Step 6. Watch sync in progress" ; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to run Step 6...";  \
+	read -r _; \
+	$(ARGOCD_CLI_TOOL) app wait $(ARGOCD_DEV_APP_NAME) --sync
+
+	@printf '$(CYAN) %s $(RESET) \n' \
+		'Step 7. Verify restored' \
+		'		 READY: 1/1' ; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to run Step 7...";  \
+	read -r _; \
+	kubectl get deployment $(ARGOCD_DEV_APP_NAME) -n $(K8S_NAMESPACE_DEV)
+	kubectl get deployment $(ARGOCD_DEV_APP_NAME) -n $(K8S_NAMESPACE_DEV) -o jsonpath='{.spec.replicas}{"\n"}'
+
+	@printf '$(CYAN) %s $(RESET) \n' \
+		'Step 8. Restoring original automated sync policy...' \
+		'		 --sync-policy automated --auto-prune --self-heal=true' ; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to run Step 7...";  \
+	read -r _; \
+	$(ARGOCD_CLI_TOOL) app set $(ARGOCD_DEV_APP_NAME) --sync-policy automated --auto-prune --self-heal=true
+
+explore-sync-strategies-when-to-use-each-mode: ## Sync Strategies: Understand when to use each mode
+	@printf '$(CYAN) %s $(RESET) \n' \
+		' Sync Strategies: When Not to Use Each Mode' \
+		' Note: Automated sync + selfHeal + prune is powerful but can be dangerous.' \
+		'+--------------------------+-----------------------------------+-----------------------------------+ '\
+		'| Mode                     | When to use                       | Risk                              | '\
+		'+--------------------------+-----------------------------------+-----------------------------------+ '\
+		'| Manual                   | Prod initial deploy,              | Requires operator action          | '\
+		'|                          | high-risk changes                 |                                   | '\
+		'+--------------------------+-----------------------------------+-----------------------------------+ '\
+		'| Automated (no selfHeal)  | Dev, low-risk changes             | Manual drift persists             | '\
+		'+--------------------------+-----------------------------------+-----------------------------------+ '\
+		'| Automated + selfHeal     | Dev/staging where Git is truth    | Manual changes are overwritten    | '\
+		'+--------------------------+-----------------------------------+-----------------------------------+ '\
+		'| Automated + selfHeal +   | Full GitOps discipline            | Git deletion can cause outage     | '\
+		'| prune                    |                                   |                                   | '\
+		'+--------------------------+-----------------------------------+-----------------------------------+ '\
+		'+--------------------------+-----------------------------------+-----------------------------------+ '\
+		'|Production Pattern : Disable automated sync — make it manual                                      | '\
+		'+--------------------------+-----------------------------------+-----------------------------------+ '; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to continue..."; \
+	read -r _
+
+	@printf '$(CYAN) %s $(RESET) \n' \
+		'Step 1. Test Production Pattern : Disable automated sync — make it manual ' \
+		'		 Use applications/myapp-dev-manual.yaml with:' \
+		'		  - NO syncPolicy.automated block = manual sync only' \
+		'		  - ArgoCD detects drift but does NOT auto-apply'; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to run Step 1...";  \
+	read -r _; \
+
+
+	@printf '$(CYAN) %s $(RESET) \n' \
+		'Apply ./applications/myapp-dev-manual.yaml and create the myapp-dev application in dev environment'; \
+	kubectl apply -f ./applications/myapp-dev-manual.yaml
+
+	@printf '$(CYAN) %s $(RESET) \n' \
+		'Now scale again — ArgoCD will detect drift but NOT auto-revert '; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to run ...";  \
+	read -r _; \
+	kubectl scale deployment $(ARGOCD_DEV_APP_NAME) -n $(K8S_NAMESPACE_DEV) --replicas=3
+	kubectl get deployment $(ARGOCD_DEV_APP_NAME) -n $(K8S_NAMESPACE_DEV) -o jsonpath='{.spec.replicas}{"\n"}'
+
+	@printf '$(CYAN) %s $(RESET) \n' "Wait for 30 Seconds"; 
+	sleep 30
+
+	@printf '$(CYAN) %s $(RESET) \n' \
+		'Verify current state: Sync Status: OutOfSync (detected but not acted on) '; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to run ...";  \
+	read -r _; \
+	$(ARGOCD_CLI_TOOL) app get $(ARGOCD_DEV_APP_NAME)  | grep -E "Sync|Health"
+
+	# Manual sync required to restore
+	@printf '$(CYAN) %s $(RESET) \n' \
+		'Explict: Manual sync required to restore'; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to run ...";  \
+	read -r _; \
+	$(ARGOCD_CLI_TOOL) app sync $(ARGOCD_DEV_APP_NAME) --prune
+	kubectl get deployment $(ARGOCD_DEV_APP_NAME) -n $(K8S_NAMESPACE_DEV)
+	kubectl get deployment $(ARGOCD_DEV_APP_NAME) -n $(K8S_NAMESPACE_DEV) -o jsonpath='{.spec.replicas}{"\n"}'
+
+explore-sync-waves-handle-resource-order-when-resource-A-depends-on-resource-B-etc: ## Understand Sync Waves and Resource Order
+	@printf '$(CYAN) %s $(RESET) \n' \
+		'Sync Waves and Resource Order: ' \
+		'		 ArgoCD syncs all resources simultaneously by default.' \
+		'		 This causes problems when resource B depends on resource A' \
+		'		 (e.g., a Job that requires a ConfigMap to exist first).' \
+		'		 Sync waves solve this.'; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to continue...";  \
+	read -r _; \
+
+	@printf '$(CYAN) %s $(RESET) \n' \
+		'Add sync wave annotations to control resource creation order' \
+		'		 - Wave numbers: lower = created first.' \
+		'		 - All wave N resources must be healthy before wave N+1 starts' \
+		' Note: Check ./sync-wave-example.yaml file and follow the steps to add sync wave annotations'; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to continue...";  \
+	read -r _; \
+
+explore-app-of-apps-pattern-one-root-application-manages-other-applications: ## Understand ArgoCD uses the "App of Apps" pattern: one root Application that manages other Applications.
+	@printf '$(CYAN) %s $(RESET) \n' \
+		"ArgoCD App of Apps Pattern: " \
+		"For managing multiple applications, ArgoCD uses the App of Apps pattern:" \
+		"	One root Application that manages other Applications." \
+		"	Note: Check applications/root-app.yaml file and understand it." \
+		"Why App of Apps: " \
+		"	- When you add a new environment or a new application to your platform," \
+		"	you create an Application manifest in Git." \
+		"	- ArgoCD  root app detects the new file, creates the Application object," \
+		"	and that Application deploys the workload." \
+		"	- You never touch the cluster directly to add a new application" \
+		"	: you push to Git."; \
+	printf '$(CYAN) %s $(RESET) \n' "Press ENTER to continue...";  \
+	read -r _
+
+

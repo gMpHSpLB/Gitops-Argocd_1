@@ -14,13 +14,26 @@ metadata:
     notifications.argoproj.io/subscribe.on-health-degraded.pagerduty: platform-oncall
 spec:
   project: myapp-team
-  source:
-    repoURL: https://github.com/gMpHSpLB/Gitops-Argocd_1.git
-    targetRevision: main
-    path: .
-    helm:
-      valueFiles:
-        - envs/prod/values.yaml
+  # source:
+  #   repoURL: https://github.com/gMpHSpLB/Gitops-Argocd_1.git
+  #   targetRevision: main
+  #   path: .
+  #   helm:
+  #     valueFiles:
+  #       - envs/prod/values.yaml
+  sources:   # ArgoCD 2.6+ multi-source
+    # Source 1: Helm chart from OCI (GHCR)
+    - repoURL: oci://ghcr.io/gmphsplb/helm-lab
+      chart: myapp
+      targetRevision: "1.0.0"
+      helm:
+        # Values are provided by the second source via $values
+        valueFiles:
+          - $values/envs/prod/values.yaml
+    # Source 2: GitOps repo with per-environment values      
+    - repoURL: https://github.com/gMpHSpLB/Gitops-Argocd_1.git
+      targetRevision: main
+      ref: values   # defines $values for the first source    
   destination:
     server: https://kubernetes.default.svc
     namespace: myapp-prod
