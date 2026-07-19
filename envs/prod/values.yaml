@@ -4,7 +4,7 @@
 environment: prod
 image:
   repository: ghcr.io/gmphsplb/myapp
-  tag: "sha-25d966e022891b6e2ed5bac9c88b20abf24364ec"
+  tag: "sha-719edc4b8bf0ca8570af25063ca5be1b9b05f236"
   digest: ""
   pullPolicy: IfNotPresent
 replicaCount: 3
