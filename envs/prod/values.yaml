@@ -3,8 +3,8 @@
 
 environment: prod
 image:
-  repository: ghcr.io//myapp
-  tag: "sha-d1ae1d32f5feef19ea7bac9dcc64f38a60a81513"
+  repository: ghcr.io/gmphsplb/myapp
+  tag: "sha-25d966e022891b6e2ed5bac9c88b20abf24364ec"
   digest: ""
   pullPolicy: IfNotPresent
 replicaCount: 3
